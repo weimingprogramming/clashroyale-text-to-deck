@@ -15,9 +15,9 @@
             display: flex; flex-direction: column; align-items: center;
         }
         
-        h1 { margin-bottom: 5px; color: #333; }
+        h1 { margin-bottom: 5px; color: #333; font-size: 24px; }
+        p.subtitle { margin-top: 0; color: #666; font-size: 13px; max-width: 300px; line-height: 1.4; margin-bottom: 20px; }
         
-        /* Status Text - Shows what the app is "Thinking" */
         #status-text { 
             height: 40px; color: #666; font-size: 14px; 
             margin-bottom: 5px; font-weight: 500;
@@ -27,7 +27,7 @@
 
         .deck-grid {
             display: grid; grid-template-columns: repeat(4, 1fr);
-            gap: 8px; width: 100%; max-width: 400px; margin: 20px 0;
+            gap: 8px; width: 100%; max-width: 400px; margin: 15px 0 30px 0;
         }
         
         .card-slot {
@@ -42,7 +42,6 @@
         .card-slot.filled:hover { background-color: #fee2e2; border-color: #ef4444; }
         .card-slot.filled:active { transform: scale(0.95); }
         
-        /* BORDERS */
         .card-slot.evo { border-color: #d946ef; background: #fdf4ff; box-shadow: 0 0 8px rgba(217, 70, 239, 0.4); }
         .card-slot.hero-troop { border-color: #06b6d4; background: #ecfeff; color: #0891b2; box-shadow: 0 0 10px rgba(6, 182, 212, 0.6); }
         .card-slot.champion { border-color: #fbbf24; background: #fffbeb; box-shadow: 0 0 8px rgba(251, 191, 36, 0.4); }
@@ -67,52 +66,113 @@
         .generate-btn.active { opacity: 1; pointer-events: auto; }
 
         @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.05); } 100% { transform: scale(1); } }
+        /* Add this to your styles */
+        .card-img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain; /* Ensures the whole card is visible */
+            pointer-events: none; /* Let clicks pass through to the slot */
+            display: block;
+        }
+        .card-slot {
+            padding: 0; /* Remove padding so image fills the box */
+            overflow: hidden;
+        }
+        .slot-label {
+            z-index: 10; /* Ensure number stays on top of image */
+            text-shadow: 1px 1px 2px black; /* Make text readable over image */
+            color: white;
+            font-weight: bold;
+        }
+
+        /* Instruction Section Styles */
+        .instructions-box {
+            margin-top: 30px;
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            max-width: 350px;
+            width: 100%;
+            text-align: left;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            border: 1px solid #e5e7eb;
+        }
+
+        .instructions-box h3 {
+            margin: 0 0 10px 0;
+            font-size: 16px;
+            color: #333;
+            border-bottom: 2px solid var(--cr-bg);
+            padding-bottom: 8px;
+        }
+
+        .instructions-box ol {
+            padding-left: 15px;
+            margin: 0;
+            color: #555;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .instructions-box li {
+            margin-bottom: 8px;
+        }
+
     </style>
 </head>
 <body>
 
-    <h1>Clash Royale Text to Deck helper</h1>
-    <h2>Created by player wmjmwl2</h2>
+    <h1>Clash Royale Text to Deck</h1>
+    <p class="subtitle">Type or speak cards naturally. <br>Ex: "Hero Knight, Evo Zap, Little Prince"</p>
+    
     <div id="status-text">Initializing...</div>
     
-    <input type="text" id="text-input" placeholder="Type here (e.g. 'Hero Knight, Evo Zap')">
+    <input type="text" id="text-input" placeholder="Type here...">
     <button id="voice-btn" class="voice-btn" disabled>Loading...</button>
+    
     <div class="deck-grid" id="deck-grid"></div>
+    
     <button id="royaleapi-btn" class="generate-btn">Add 8 Cards to Finish</button>
-
+    <div class="instructions-box">
+        <h3>Instructions</h3>
+        <ol>
+            <li>
+                <strong>Step 1:</strong> On your phone, write (or speak) the card you want in the textbox. You can tap a card slot to remove it.
+            </li>
+            <li>
+                <strong>Step 2:</strong> Click "Open in RoyaleAPI" to generate the link, then copy the link from the RoyaleAPI page.
+            </li>
+        </ol>
+    </div>
     <script>
         // 1. CONFIGURATION
-        const API_URL = "https://royaleapi.github.io/cr-api-data/json/cards.json";
-        
-        const EVO_LIST = [
-            "Knight", "Barbarians", "Royal Giant", "Skeletons", "Archers", 
-            "Bats", "Royal Recruits", "Bomber", "Wall Breakers", "Zap", 
-            "Tesla", "Battle Ram", "Wizard", "Valkyrie", "Ice Spirit", 
-            "Goblin Barrel", "Mortar", "Firecracker", "P.E.K.K.A", "Mega Knight", 
-            "Electro Giant", "Goblin Drill", "Musketeer", "Mini P.E.K.K.A", "Giant"
-        ];
+        const DATA_URL = "./carddetails.json"; // Load LOCAL file
 
-        const SPECIAL_HEROES = ["Knight", "Musketeer", "Giant", "Mini P.E.K.K.A"];
-
+        // Nicknames for easier typing/voice
         const NICKNAMES = {
-            "archer-queen": ["aq", "queen"],
-            "golden-knight": ["gk", "golden"],
-            "skeleton-king": ["sk", "king"],
+            // Champions & Heroes
+            "archer-queen": ["aq", "queen"], 
+            "golden-knight": ["gk", "golden"], 
+            "skeleton-king": ["sk", "king"], 
             "mighty-miner": ["mm", "mighty"], 
-            "monk": ["monk"],
+            "monk": ["monk"], 
             "little-prince": ["lp", "kid", "guardian"],
-            "skeleton-army": ["skarmy", "scarmy", "army"], // Added "army" for voice ease
-            "goblin-barrel": ["barrel", "bait"],
-            "hog-rider": ["hog"],
+
+            // Common Win Conditions & Spells
+            "hog-rider": ["hog"], 
+            "goblin-barrel": ["barrel", "bait"], 
+            "royal-giant": ["rg", "royal g"], 
+            "giant": ["big guy"], 
+            "x-bow": ["xbow"], 
+            "the-log": ["log"], 
+            "skeleton-army": ["skarmy", "scarmy", "army"], 
             "musketeer": ["musky", "musk"],
-            "mini-p.e.k.k.a": ["mini pekka", "mini peka", "pancakes"],
-            "giant": ["big guy"],
-            "electro-spirit": ["e spirit", "espirit"],
-            "x-bow": ["xbow"],
-            "the-log": ["log"],
-            "royal-giant": ["rg", "royal g"],
-            "magic-archer": ["marcher"],
+            "mini-pekka": ["mini pekka", "mini peka", "pancakes"], 
             "pekka": ["peka", "mommy", "mommy pekka"],
+            "magic-archer": ["marcher"], 
+            "electro-spirit": ["e spirit", "espirit"],
+
+            // New Additions
             "giant-snowball": ["snowball", "snow"],
             "baby-dragon": ["baby"],
             "spear-goblins": ["spear", "spears"],
@@ -130,43 +190,77 @@
             "electro-dragon": ["e drag", "e dragon"],
             "elixir-golem": ["e golem"],
             "battle-healer": ["healer"],
-            "archer-queen": ["queen"],
             "mother-witch": ["mother"],
             "goblin-drill": ["drill"],
-            "barbarian-barrel": ["barb barrrel"],
+            "barbarian-barrel": ["barb barrel"],
+
+            // Hero Troops (Custom)
+            "knight-hero": ["hero knight", "super knight"],
+            "musketeer-hero": ["hero musky", "super musketeer"],
+            "giant-hero": ["hero giant"],
+            "mini-pekka-hero": ["hero mini pekka", "super mini pekka"]
         };
 
         let CARD_DB = [];
         let currentDeck = [];
 
+        // Helper to generate slugs from names (e.g. "Mini P.E.K.K.A" -> "mini-pekka")
+        function generateSlug(name) {
+            return name.toLowerCase()
+                       .replace(/\./g, "")    // Remove dots (P.E.K.K.A -> PEKKA)
+                       .replace(/\s+/g, "-"); // Spaces to dashes
+        }
+
         // 2. STARTUP
         async function initApp() {
             try {
-                const response = await fetch(API_URL);
-                if (!response.ok) throw new Error("Network error");
+                const response = await fetch(DATA_URL);
+                if (!response.ok) throw new Error("Could not find carddetails.json");
                 const data = await response.json();
                 
-                CARD_DB = data.map(card => {
-                    const slug = card.key; 
-                    return {
+                // Parse items from the new JSON structure
+                const rawItems = data.items || [];
+
+                rawItems.forEach(card => {
+                    const slug = generateSlug(card.name);
+                    
+                    // 1. Add Normal Version
+                    CARD_DB.push({
                         name: card.name,
                         id: card.id,
                         slug: slug,
-                        type: card.rarity === "Champion" ? "champion" : card.rarity,
-                        canEvo: EVO_LIST.includes(card.name),
+                        type: card.rarity === "champion" ? "champion" : card.rarity,
+                        image: card.iconUrls.medium, 
+                        evoImage: card.iconUrls.evolutionMedium,
+                        // Check if evolutionMedium image exists OR maxEvolutionLevel > 0
+                        canEvo: (card.maxEvolutionLevel > 0) || (card.iconUrls && card.iconUrls.evolutionMedium),
                         aliases: NICKNAMES[slug] || []
-                    };
+                    });
+
+                    // 2. Add Hero Version (If heroMedium exists)
+                    if (card.iconUrls && card.iconUrls.heroMedium) {
+                        CARD_DB.push({
+                            name: "Hero " + card.name,
+                            id: card.id, // Same ID
+                            slug: slug + "-hero", // Special slug for Link
+                            type: "Hero",
+                            image: card.iconUrls.heroMedium,
+                            canEvo: false,
+                            aliases: NICKNAMES[slug + "-hero"] || []
+                        });
+                        console.log("Auto-detected Hero:", card.name);
+                    }
                 });
 
                 updateStatus("Ready.");
                 const vBtn = document.getElementById('voice-btn');
                 vBtn.disabled = false;
-                vBtn.innerText = "🎤 Start Voice";
+                vBtn.innerText = "Try Voice (beta)";
                 renderDeck();
             } catch (err) { updateStatus("Error: " + err.message); }
         }
 
-        // 3. FUZZY MATCH (Levenshtein)
+        // 3. FUZZY MATCH
         function levenshtein(a, b) {
             const matrix = [];
             for(let i=0; i<=b.length; i++) matrix[i] = [i];
@@ -183,9 +277,7 @@
         function findBestMatch(input) {
             if(!input || input.length < 2) return null;
             input = input.toLowerCase().trim();
-            let bestMatch = null;
-            let bestScore = -1;
-
+            let bestMatch = null, bestScore = -1;
             CARD_DB.forEach(card => {
                 const candidates = [card.name, ...(card.aliases || [])];
                 candidates.forEach(cand => {
@@ -194,220 +286,158 @@
                     const maxLen = Math.max(input.length, cLower.length);
                     let score = 1 - (dist / maxLen);
                     if (cLower.includes(input)) score += 0.1;
-                    
-                    // Higher threshold (0.75) reduces false positives like "Mini" -> "Miner"
-                    if (score > bestScore && score > 0.75) { 
-                        bestScore = score;
-                        bestMatch = card;
-                    }
+                    if (score > bestScore && score > 0.75) { bestScore = score; bestMatch = card; }
                 });
             });
             return bestMatch;
         }
 
-        // --- 4. THE NEW INTELLIGENT PARSER ---
+        // 4. LOGIC
         function processCommand(rawText) {
-            // 1. Sanitize: remove punctuation, convert to array of words
-            const tokens = rawText.toLowerCase()
-                                  .replace(/[.,/#!$%^&*;:{}=\-_`~()]/g, "") // Remove punctuation
-                                  .split(/\s+/); // Split by ANY space
-            
-            let i = 0;
-            let deckChanged = false;
-
-            // Flags for the next card found
-            let nextIsEvo = false;
-            let nextIsHero = false;
-            let nextIsRemove = false;
+            const tokens = rawText.toLowerCase().replace(/[.,/#!$%^&*;:{}=\-_`~()]/g, "").split(/\s+/);
+            let i = 0, deckChanged = false;
+            let nextIsEvo = false, nextIsHero = false, nextIsRemove = false;
 
             while (i < tokens.length) {
                 const word = tokens[i];
-                
-                // 2. CHECK MODIFIERS
-                if (word === "evo" || word === "evolution") {
-                    nextIsEvo = true;
-                    i++; continue;
-                }
-                if (word === "hero") {
-                    nextIsHero = true;
-                    i++; continue;
-                }
-                if (word === "remove" || word === "delete") {
-                    nextIsRemove = true;
-                    i++; continue;
-                }
-                if (word === "and" || word === "then") {
-                    i++; continue;
-                }
+                if (word === "evo" || word === "evolution") { nextIsEvo = true; i++; continue; }
+                if (word === "hero") { nextIsHero = true; i++; continue; }
+                if (word === "remove" || word === "delete") { nextIsRemove = true; i++; continue; }
+                if (word === "and" || word === "then") { i++; continue; }
 
-                // 3. GREEDY MATCHING (Try 3 words, then 2, then 1)
-                // Example: "Mini Pekka" -> We try "Mini Pekka" before just "Mini"
-                let match = null;
-                let wordsConsumed = 0;
-
-                // Try 3 words (e.g. "Royal Hogs") - unlikely to be 3 but good safety
+                let match = null, wordsConsumed = 0;
                 if (i + 2 < tokens.length) {
-                    const phrase3 = word + " " + tokens[i+1] + " " + tokens[i+2];
-                    match = findBestMatch(phrase3);
+                    match = findBestMatch(word + " " + tokens[i+1] + " " + tokens[i+2]);
                     if (match) wordsConsumed = 3;
                 }
-
-                // Try 2 words (e.g. "Mini Pekka", "Ice Spirit")
                 if (!match && i + 1 < tokens.length) {
-                    const phrase2 = word + " " + tokens[i+1];
-                    match = findBestMatch(phrase2);
+                    match = findBestMatch(word + " " + tokens[i+1]);
                     if (match) wordsConsumed = 2;
                 }
-
-                // Try 1 word (e.g. "Pekka", "Log")
                 if (!match) {
                     match = findBestMatch(word);
                     if (match) wordsConsumed = 1;
                 }
 
-                // 4. EXECUTE
                 if (match) {
                     if (nextIsRemove) {
-                        removeCard(match.id);
+                        removeCard(match.id, match.slug);
                         updateStatus(`Removed ${match.name}`);
                         deckChanged = true;
                     } else {
                         addCardToDeck(match, nextIsEvo, nextIsHero);
                         deckChanged = true;
                     }
-                    
-                    // Reset modifiers for the next card
-                    nextIsEvo = false;
-                    nextIsHero = false;
-                    nextIsRemove = false;
-                    
-                    // Jump forward
-                    i += wordsConsumed;
-                } else {
-                    // Skip unknown word
-                    i++;
-                }
+                    nextIsEvo = false; nextIsHero = false; nextIsRemove = false; i += wordsConsumed;
+                } else { i++; }
             }
-
             if (deckChanged) renderDeck();
         }
 
         function addCardToDeck(card, requestEvo, requestHero) {
-            if (currentDeck.length >= 8 && !currentDeck.find(c => c.id === card.id)) {
-                updateStatus("Deck Full!");
-                return;
-            }
+            if (currentDeck.length >= 8 && !currentDeck.find(c => c.id === card.id)) { updateStatus("Deck Full!"); return; }
+            
+            // Check manual Hero Request vs Card Type
+            if (card.type === "Hero") requestHero = true;
 
-            // Conflict Check: Remove any version of this card first
-            currentDeck = currentDeck.filter(c => c.id !== card.id);
+            currentDeck = currentDeck.filter(c => c.id !== card.id); // Conflict replace
 
-            // HERO Validation
             let finalHero = false;
             if (requestHero) {
-                if (SPECIAL_HEROES.includes(card.name)) {
-                    if (currentDeck.filter(c => c.isHeroTroop).length >= 2) {
-                        updateStatus("Max 2 Heroes allowed!");
-                        return;
+                // Allow if the card itself is "Hero" OR the user said "Hero" and the base card has a Hero version
+                // We verify by checking if a "Hero" version exists in DB or if this IS the hero version
+                if (card.type === "Hero" || CARD_DB.find(c => c.id === card.id && c.type === "Hero")) {
+                     // Get the Hero Version if we matched the Base version
+                    if (card.type !== "Hero") {
+                         const heroVer = CARD_DB.find(c => c.id === card.id && c.type === "Hero");
+                         if (heroVer) card = heroVer;
                     }
-                    finalHero = true;
-                    requestEvo = false; 
-                } else {
-                    updateStatus(`${card.name} cannot be a Hero Troop.`);
-                }
+
+                    if (currentDeck.filter(c => c.isHeroTroop).length >= 2) { updateStatus("Max 2 Heroes allowed!"); return; }
+                    finalHero = true; requestEvo = false;
+                } else { updateStatus(`${card.name} cannot be a Hero Troop.`); }
             }
 
-            // EVO Validation
             let finalEvo = false;
             if (requestEvo && card.canEvo) {
-                if (currentDeck.filter(c => c.isEvo).length >= 2) {
-                    updateStatus("Max 2 Evos allowed!");
-                } else {
-                    finalEvo = true;
-                }
+                if (currentDeck.filter(c => c.isEvo).length >= 2) { updateStatus("Max 2 Evos allowed!"); }
+                else { finalEvo = true; }
             }
 
             let entry = { ...card, isEvo: finalEvo, isHeroTroop: finalHero };
             currentDeck.push(entry);
-
-            // Sort: Hero(4) -> Evo(2) -> Champ(1) -> Normal(0)
             currentDeck.sort((a, b) => {
                 let scoreA = (a.isHeroTroop ? 4 : 0) + (a.isEvo ? 2 : 0) + (a.type === 'champion' ? 1 : 0);
                 let scoreB = (b.isHeroTroop ? 4 : 0) + (b.isEvo ? 2 : 0) + (b.type === 'champion' ? 1 : 0);
                 return scoreB - scoreA;
             });
-            
-            const typeStr = finalHero ? "HERO" : (finalEvo ? "Evo" : "");
-            updateStatus(`Added ${typeStr} ${card.name}`);
+            updateStatus(`Added ${finalHero ? "HERO" : (finalEvo ? "Evo" : "")} ${card.name}`);
         }
 
-        function removeCard(id) { currentDeck = currentDeck.filter(c => c.id !== id); }
+        function removeCard(id, slug) { 
+             currentDeck = currentDeck.filter(c => c.slug !== slug); 
+        }
 
-        // 5. RENDER UI
         function renderDeck() {
-            const grid = document.getElementById('deck-grid');
+            const grid = document.getElementById('deck-grid'); 
             grid.innerHTML = '';
+            
             for (let i = 0; i < 8; i++) {
-                const card = currentDeck[i];
+                const card = currentDeck[i]; 
                 const div = document.createElement('div');
+                
                 if (card) {
                     let classes = "card-slot filled";
                     if (card.isHeroTroop) classes += " hero-troop";
                     else if (card.type === "champion") classes += " champion";
                     else if (card.isEvo) classes += " evo";
+                    
                     div.className = classes;
-                    div.innerHTML = `<span class="slot-label">${i+1}</span>${card.name}${card.isHeroTroop ? '<br><small>HERO</small>' : (card.isEvo ? '<br><small>Evo</small>' : '')}`;
-                    div.title = "Tap to Remove";
-                    div.onclick = () => { removeCard(card.id); renderDeck(); };
-                } else {
-                    div.className = 'card-slot'; div.innerHTML = i+1;
+
+                    // DETERMINE WHICH IMAGE TO USE
+                    // If it's Evo and we have an evoImage, use it. Otherwise use normal image.
+                    const imgSrc = (card.isEvo && card.evoImage) ? card.evoImage : card.image;
+                    
+                    div.innerHTML = `
+                        <span class="slot-label">${i+1}</span>
+                        <img src="${imgSrc}" class="card-img" alt="${card.name}">
+                    `;
+                    
+                    div.title = "Tap to Remove " + card.name;
+                    div.onclick = () => { removeCard(card.id, card.slug); renderDeck(); };
+                } else { 
+                    div.className = 'card-slot'; 
+                    div.innerHTML = `<span style="opacity:0.3; font-size: 20px;">${i+1}</span>`; 
                 }
                 grid.appendChild(div);
             }
-
+            
+            // Update Button State
             const btn = document.getElementById('royaleapi-btn');
-            if (currentDeck.length === 8) {
-                btn.classList.add('active'); btn.innerText = "Open in RoyaleAPI";
-            } else {
-                btn.classList.remove('active'); btn.innerText = `Add ${8 - currentDeck.length} more cards`;
+            if (currentDeck.length === 8) { 
+                btn.classList.add('active'); 
+                btn.innerText = "Open in RoyaleAPI"; 
+            } else { 
+                btn.classList.remove('active'); 
+                btn.innerText = `Add ${8 - currentDeck.length} more cards`; 
             }
         }
 
         function updateStatus(msg) { document.getElementById('status-text').innerText = msg; }
 
-        // 6. LISTENERS
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         if (SpeechRecognition) {
-            const recognition = new SpeechRecognition();
-            recognition.continuous = true; 
-            recognition.lang = 'en-US';
-            
-            const voiceBtn = document.getElementById('voice-btn');
-            voiceBtn.onclick = () => {
-                if (voiceBtn.classList.contains('listening')) {
-                    recognition.stop(); voiceBtn.classList.remove('listening'); voiceBtn.innerText = "🎤 Start Voice";
-                } else {
-                    recognition.start(); voiceBtn.classList.add('listening'); voiceBtn.innerText = "🛑 Stop Listening";
-                }
+            const recognition = new SpeechRecognition(); recognition.continuous = true; recognition.lang = 'en-US';
+            const vBtn = document.getElementById('voice-btn');
+            vBtn.onclick = () => {
+                if (vBtn.classList.contains('listening')) { recognition.stop(); vBtn.classList.remove('listening'); vBtn.innerText = "🎤 Start Voice"; }
+                else { recognition.start(); vBtn.classList.add('listening'); vBtn.innerText = "🛑 Stop Listening"; }
             };
-
             recognition.onresult = (event) => {
-                // Get the latest chunk of speech (the newest sentence)
-                const lastResultIdx = event.results.length - 1;
-                const transcript = event.results[lastResultIdx][0].transcript;
-                
-                // Show what the app "Heard" briefly
-                updateStatus(`Heard: "${transcript}"`);
-                
-                // Process it immediately
-                processCommand(transcript);
+                const transcript = event.results[event.results.length - 1][0].transcript;
+                updateStatus(`Heard: "${transcript}"`); processCommand(transcript);
             };
-            
-            recognition.onerror = (event) => {
-                console.error(event.error);
-                if(event.error === 'no-speech') return; // Ignore silence
-                voiceBtn.classList.remove('listening'); 
-                voiceBtn.innerText = "🎤 Retry Voice";
-            }
+            recognition.onerror = (e) => { if(e.error!=='no-speech') vBtn.innerText = "🎤 Retry"; };
         } else { document.getElementById('voice-btn').style.display = 'none'; }
 
         document.getElementById('text-input').addEventListener('keyup', (e) => {
@@ -417,13 +447,12 @@
         document.getElementById('royaleapi-btn').addEventListener('click', () => {
             if (currentDeck.length !== 8) return;
             const slugs = currentDeck.map(c => {
+                if (c.slug.includes("-hero")) return c.slug;
                 if (c.isHeroTroop) return `${c.slug}-hero`; 
                 if (c.isEvo) return `${c.slug}-ev1`;       
                 return c.slug;
             }).join(',');
-            
-            const url = `https://royaleapi.com/decks/stats/${slugs}`;
-            window.open(url, '_blank');
+            window.open(`https://royaleapi.com/decks/stats/${slugs}`, '_blank');
         });
 
         initApp();
