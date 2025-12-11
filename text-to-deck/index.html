@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Text to Deck</title>
+    <style>
+        /* --- STYLES --- */
+        :root { --cr-blue: #3b82f6; --cr-bg: #f0f2f5; }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
+            background: var(--cr-bg); 
+            margin: 0; padding: 20px; 
+            text-align: center; 
+            display: flex; flex-direction: column; align-items: center;
+        }
+        
+        h1 { margin-bottom: 5px; color: #333; }
+        
+        /* Status Text - Shows what the app is "Thinking" */
+        #status-text { 
+            height: 40px; color: #666; font-size: 14px; 
+            margin-bottom: 5px; font-weight: 500;
+            display: flex; align-items: center; justify-content: center;
+            padding: 0 10px;
+        }
+
+        .deck-grid {
+            display: grid; grid-template-columns: repeat(4, 1fr);
+            gap: 8px; width: 100%; max-width: 400px; margin: 20px 0;
+        }
+        
+        .card-slot {
+            aspect-ratio: 3/4; background: #e5e7eb; border-radius: 8px;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            font-size: 10px; position: relative; border: 3px solid transparent;
+            font-weight: bold; color: #888; transition: all 0.2s;
+            overflow: hidden; user-select: none; text-align: center; padding: 2px;
+        }
+        
+        .card-slot.filled { background: white; border-color: #ccc; color: #000; cursor: pointer; }
+        .card-slot.filled:hover { background-color: #fee2e2; border-color: #ef4444; }
+        .card-slot.filled:active { transform: scale(0.95); }
+        
+        /* BORDERS */
+        .card-slot.evo { border-color: #d946ef; background: #fdf4ff; box-shadow: 0 0 8px rgba(217, 70, 239, 0.4); }
+        .card-slot.hero-troop { border-color: #06b6d4; background: #ecfeff; color: #0891b2; box-shadow: 0 0 10px rgba(6, 182, 212, 0.6); }
+        .card-slot.champion { border-color: #fbbf24; background: #fffbeb; box-shadow: 0 0 8px rgba(251, 191, 36, 0.4); }
+
+        .slot-label { position: absolute; top: 2px; right: 4px; font-size: 9px; opacity: 0.5; }
+        
+        input[type="text"] {
+            padding: 15px; width: 100%; max-width: 350px;
+            border-radius: 12px; border: 2px solid #ccc; font-size: 16px; margin-bottom: 15px;
+        }
+        input:focus { outline: none; border-color: var(--cr-blue); }
+
+        button {
+            padding: 15px 30px; border-radius: 30px; border: none;
+            font-weight: bold; font-size: 16px; cursor: pointer;
+            width: 100%; max-width: 350px; margin-bottom: 10px;
+        }
+        
+        .voice-btn { background: #ef4444; color: white; }
+        .voice-btn.listening { background: #b91c1c; animation: pulse 1.5s infinite; }
+        .generate-btn { background: var(--cr-blue); color: white; opacity: 0.5; pointer-events: none; }
+        .generate-btn.active { opacity: 1; pointer-events: auto; }
+
+        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.05); } 100% { transform: scale(1); } }
+    </style>
+</head>
+<body>
+
+    <h1>Clash Royale Text to Deck helper</h1>
+    <h2>Created by player wmjmwl2</h2>
+    <div id="status-text">Initializing...</div>
+    
+    <input type="text" id="text-input" placeholder="Type here (e.g. 'Hero Knight, Evo Zap')">
+    <button id="voice-btn" class="voice-btn" disabled>Loading...</button>
+    <div class="deck-grid" id="deck-grid"></div>
+    <button id="royaleapi-btn" class="generate-btn">Add 8 Cards to Finish</button>
+
+    <script>
+        // 1. CONFIGURATION
+        const API_URL = "https://royaleapi.github.io/cr-api-data/json/cards.json";
+        
+        const EVO_LIST = [
+            "Knight", "Barbarians", "Royal Giant", "Skeletons", "Archers", 
+            "Bats", "Royal Recruits", "Bomber", "Wall Breakers", "Zap", 
+            "Tesla", "Battle Ram", "Wizard", "Valkyrie", "Ice Spirit", 
+            "Goblin Barrel", "Mortar", "Firecracker", "P.E.K.K.A", "Mega Knight", 
+            "Electro Giant", "Goblin Drill", "Musketeer", "Mini P.E.K.K.A", "Giant"
+        ];
+
+        const SPECIAL_HEROES = ["Knight", "Musketeer", "Giant", "Mini P.E.K.K.A"];
+
+        const NICKNAMES = {
+            "archer-queen": ["aq", "queen"],
+            "golden-knight": ["gk", "golden"],
+            "skeleton-king": ["sk", "king"],
+            "mighty-miner": ["mm", "mighty"], 
+            "monk": ["monk"],
+            "little-prince": ["lp", "kid", "guardian"],
+            "skeleton-army": ["skarmy", "scarmy", "army"], // Added "army" for voice ease
+            "goblin-barrel": ["barrel", "bait"],
+            "hog-rider": ["hog"],
+            "musketeer": ["musky", "musk"],
+            "mini-p.e.k.k.a": ["mini pekka", "mini peka", "pancakes"],
+            "giant": ["big guy"],
+            "electro-spirit": ["e spirit", "espirit"],
+            "x-bow": ["xbow"],
+            "the-log": ["log"],
+            "royal-giant": ["rg", "royal g"],
+            "magic-archer": ["marcher"],
+            "pekka": ["peka", "mommy"]
+        };
+
+        let CARD_DB = [];
+        let currentDeck = [];
+
+        // 2. STARTUP
+        async function initApp() {
+            try {
+                const response = await fetch(API_URL);
+                if (!response.ok) throw new Error("Network error");
+                const data = await response.json();
+                
+                CARD_DB = data.map(card => {
+                    const slug = card.key; 
+                    return {
+                        name: card.name,
+                        id: card.id,
+                        slug: slug,
+                        type: card.rarity === "Champion" ? "champion" : card.rarity,
+                        canEvo: EVO_LIST.includes(card.name),
+                        aliases: NICKNAMES[slug] || []
+                    };
+                });
+
+                updateStatus("Ready.");
+                const vBtn = document.getElementById('voice-btn');
+                vBtn.disabled = false;
+                vBtn.innerText = "🎤 Start Voice";
+                renderDeck();
+            } catch (err) { updateStatus("Error: " + err.message); }
+        }
+
+        // 3. FUZZY MATCH (Levenshtein)
+        function levenshtein(a, b) {
+            const matrix = [];
+            for(let i=0; i<=b.length; i++) matrix[i] = [i];
+            for(let j=0; j<=a.length; j++) matrix[0][j] = j;
+            for(let i=1; i<=b.length; i++){
+                for(let j=1; j<=a.length; j++){
+                    if(b.charAt(i-1) == a.charAt(j-1)) matrix[i][j] = matrix[i-1][j-1];
+                    else matrix[i][j] = Math.min(matrix[i-1][j-1]+1, matrix[i][j-1]+1, matrix[i-1][j]+1);
+                }
+            }
+            return matrix[b.length][a.length];
+        }
+
+        function findBestMatch(input) {
+            if(!input || input.length < 2) return null;
+            input = input.toLowerCase().trim();
+            let bestMatch = null;
+            let bestScore = -1;
+
+            CARD_DB.forEach(card => {
+                const candidates = [card.name, ...(card.aliases || [])];
+                candidates.forEach(cand => {
+                    const cLower = cand.toLowerCase();
+                    const dist = levenshtein(input, cLower);
+                    const maxLen = Math.max(input.length, cLower.length);
+                    let score = 1 - (dist / maxLen);
+                    if (cLower.includes(input)) score += 0.1;
+                    
+                    // Higher threshold (0.75) reduces false positives like "Mini" -> "Miner"
+                    if (score > bestScore && score > 0.75) { 
+                        bestScore = score;
+                        bestMatch = card;
+                    }
+                });
+            });
+            return bestMatch;
+        }
+
+        // --- 4. THE NEW INTELLIGENT PARSER ---
+        function processCommand(rawText) {
+            // 1. Sanitize: remove punctuation, convert to array of words
+            const tokens = rawText.toLowerCase()
+                                  .replace(/[.,/#!$%^&*;:{}=\-_`~()]/g, "") // Remove punctuation
+                                  .split(/\s+/); // Split by ANY space
+            
+            let i = 0;
+            let deckChanged = false;
+
+            // Flags for the next card found
+            let nextIsEvo = false;
+            let nextIsHero = false;
+            let nextIsRemove = false;
+
+            while (i < tokens.length) {
+                const word = tokens[i];
+                
+                // 2. CHECK MODIFIERS
+                if (word === "evo" || word === "evolution") {
+                    nextIsEvo = true;
+                    i++; continue;
+                }
+                if (word === "hero") {
+                    nextIsHero = true;
+                    i++; continue;
+                }
+                if (word === "remove" || word === "delete") {
+                    nextIsRemove = true;
+                    i++; continue;
+                }
+                if (word === "and" || word === "then") {
+                    i++; continue;
+                }
+
+                // 3. GREEDY MATCHING (Try 3 words, then 2, then 1)
+                // Example: "Mini Pekka" -> We try "Mini Pekka" before just "Mini"
+                let match = null;
+                let wordsConsumed = 0;
+
+                // Try 3 words (e.g. "Royal Hogs") - unlikely to be 3 but good safety
+                if (i + 2 < tokens.length) {
+                    const phrase3 = word + " " + tokens[i+1] + " " + tokens[i+2];
+                    match = findBestMatch(phrase3);
+                    if (match) wordsConsumed = 3;
+                }
+
+                // Try 2 words (e.g. "Mini Pekka", "Ice Spirit")
+                if (!match && i + 1 < tokens.length) {
+                    const phrase2 = word + " " + tokens[i+1];
+                    match = findBestMatch(phrase2);
+                    if (match) wordsConsumed = 2;
+                }
+
+                // Try 1 word (e.g. "Pekka", "Log")
+                if (!match) {
+                    match = findBestMatch(word);
+                    if (match) wordsConsumed = 1;
+                }
+
+                // 4. EXECUTE
+                if (match) {
+                    if (nextIsRemove) {
+                        removeCard(match.id);
+                        updateStatus(`Removed ${match.name}`);
+                        deckChanged = true;
+                    } else {
+                        addCardToDeck(match, nextIsEvo, nextIsHero);
+                        deckChanged = true;
+                    }
+                    
+                    // Reset modifiers for the next card
+                    nextIsEvo = false;
+                    nextIsHero = false;
+                    nextIsRemove = false;
+                    
+                    // Jump forward
+                    i += wordsConsumed;
+                } else {
+                    // Skip unknown word
+                    i++;
+                }
+            }
+
+            if (deckChanged) renderDeck();
+        }
+
+        function addCardToDeck(card, requestEvo, requestHero) {
+            if (currentDeck.length >= 8 && !currentDeck.find(c => c.id === card.id)) {
+                updateStatus("Deck Full!");
+                return;
+            }
+
+            // Conflict Check: Remove any version of this card first
+            currentDeck = currentDeck.filter(c => c.id !== card.id);
+
+            // HERO Validation
+            let finalHero = false;
+            if (requestHero) {
+                if (SPECIAL_HEROES.includes(card.name)) {
+                    if (currentDeck.filter(c => c.isHeroTroop).length >= 2) {
+                        updateStatus("Max 2 Heroes allowed!");
+                        return;
+                    }
+                    finalHero = true;
+                    requestEvo = false; 
+                } else {
+                    updateStatus(`${card.name} cannot be a Hero Troop.`);
+                }
+            }
+
+            // EVO Validation
+            let finalEvo = false;
+            if (requestEvo && card.canEvo) {
+                if (currentDeck.filter(c => c.isEvo).length >= 2) {
+                    updateStatus("Max 2 Evos allowed!");
+                } else {
+                    finalEvo = true;
+                }
+            }
+
+            let entry = { ...card, isEvo: finalEvo, isHeroTroop: finalHero };
+            currentDeck.push(entry);
+
+            // Sort: Hero(4) -> Evo(2) -> Champ(1) -> Normal(0)
+            currentDeck.sort((a, b) => {
+                let scoreA = (a.isHeroTroop ? 4 : 0) + (a.isEvo ? 2 : 0) + (a.type === 'champion' ? 1 : 0);
+                let scoreB = (b.isHeroTroop ? 4 : 0) + (b.isEvo ? 2 : 0) + (b.type === 'champion' ? 1 : 0);
+                return scoreB - scoreA;
+            });
+            
+            const typeStr = finalHero ? "HERO" : (finalEvo ? "Evo" : "");
+            updateStatus(`Added ${typeStr} ${card.name}`);
+        }
+
+        function removeCard(id) { currentDeck = currentDeck.filter(c => c.id !== id); }
+
+        // 5. RENDER UI
+        function renderDeck() {
+            const grid = document.getElementById('deck-grid');
+            grid.innerHTML = '';
+            for (let i = 0; i < 8; i++) {
+                const card = currentDeck[i];
+                const div = document.createElement('div');
+                if (card) {
+                    let classes = "card-slot filled";
+                    if (card.isHeroTroop) classes += " hero-troop";
+                    else if (card.type === "champion") classes += " champion";
+                    else if (card.isEvo) classes += " evo";
+                    div.className = classes;
+                    div.innerHTML = `<span class="slot-label">${i+1}</span>${card.name}${card.isHeroTroop ? '<br><small>HERO</small>' : (card.isEvo ? '<br><small>Evo</small>' : '')}`;
+                    div.title = "Tap to Remove";
+                    div.onclick = () => { removeCard(card.id); renderDeck(); };
+                } else {
+                    div.className = 'card-slot'; div.innerHTML = i+1;
+                }
+                grid.appendChild(div);
+            }
+
+            const btn = document.getElementById('royaleapi-btn');
+            if (currentDeck.length === 8) {
+                btn.classList.add('active'); btn.innerText = "Open in RoyaleAPI";
+            } else {
+                btn.classList.remove('active'); btn.innerText = `Add ${8 - currentDeck.length} more cards`;
+            }
+        }
+
+        function updateStatus(msg) { document.getElementById('status-text').innerText = msg; }
+
+        // 6. LISTENERS
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (SpeechRecognition) {
+            const recognition = new SpeechRecognition();
+            recognition.continuous = true; 
+            recognition.lang = 'en-US';
+            
+            const voiceBtn = document.getElementById('voice-btn');
+            voiceBtn.onclick = () => {
+                if (voiceBtn.classList.contains('listening')) {
+                    recognition.stop(); voiceBtn.classList.remove('listening'); voiceBtn.innerText = "🎤 Start Voice";
+                } else {
+                    recognition.start(); voiceBtn.classList.add('listening'); voiceBtn.innerText = "🛑 Stop Listening";
+                }
+            };
+
+            recognition.onresult = (event) => {
+                // Get the latest chunk of speech (the newest sentence)
+                const lastResultIdx = event.results.length - 1;
+                const transcript = event.results[lastResultIdx][0].transcript;
+                
+                // Show what the app "Heard" briefly
+                updateStatus(`Heard: "${transcript}"`);
+                
+                // Process it immediately
+                processCommand(transcript);
+            };
+            
+            recognition.onerror = (event) => {
+                console.error(event.error);
+                if(event.error === 'no-speech') return; // Ignore silence
+                voiceBtn.classList.remove('listening'); 
+                voiceBtn.innerText = "🎤 Retry Voice";
+            }
+        } else { document.getElementById('voice-btn').style.display = 'none'; }
+
+        document.getElementById('text-input').addEventListener('keyup', (e) => {
+            if (e.key === 'Enter') { processCommand(e.target.value); e.target.value = ''; }
+        });
+
+        document.getElementById('royaleapi-btn').addEventListener('click', () => {
+            if (currentDeck.length !== 8) return;
+            const slugs = currentDeck.map(c => {
+                if (c.isHeroTroop) return `${c.slug}-hero`; 
+                if (c.isEvo) return `${c.slug}-ev1`;       
+                return c.slug;
+            }).join(',');
+            
+            const url = `https://royaleapi.com/decks/stats/${slugs}`;
+            window.open(url, '_blank');
+        });
+
+        initApp();
+    </script>
+</body>
+</html>
