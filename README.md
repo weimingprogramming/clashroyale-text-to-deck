@@ -13,7 +13,7 @@ Step 3: The Webapp generates a link to RoyaleAPI with the exact deck.
 Step 4: Click copy deck on RoyaleAPI to copy the deck into Clash Royale automatically
 
 Benefits:
-- I can create a deck in Clash Royale just by listing down cards and I do not have to scroll.
+- I can create a deck in Clash Royale just by writing down/saying outloud cards and I do not have to scroll.
 
 **How this webapp was created**
 
